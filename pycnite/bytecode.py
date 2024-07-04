@@ -128,6 +128,10 @@ class Disassembler:
                 return self._lookup(self.code.co_localsplusnames, arg)
             else:
                 return self._lookup(self.cell_names, arg)
+        elif name == "CALL_INTRINSIC_1":
+            return mapping.intrinsic_1_desc(arg, self.python_version)
+        elif name == "CALL_INTRINSIC_2":
+            return mapping.intrinsic_2_desc(arg, self.python_version)
         else:
             return arg
 

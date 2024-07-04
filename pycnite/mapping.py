@@ -421,3 +421,46 @@ def arg_type(name: str, version: Tuple[int, int]) -> Optional[int]:
     else:
         argmap = PYTHON_3_8_ARG_TYPES
     return argmap.get(name)
+
+
+# ----------------------------------------------------------
+# Function names referenced by CALL_INTRINSIC_{1,2} opcodes
+
+PYTHON_3_12_INTRINSIC_1_DESCS = [
+    "INTRINSIC_1_INVALID",
+    "INTRINSIC_PRINT",
+    "INTRINSIC_IMPORT_STAR",
+    "INTRINSIC_STOPITERATION_ERROR",
+    "INTRINSIC_ASYNC_GEN_WRAP",
+    "INTRINSIC_UNARY_POSITIVE",
+    "INTRINSIC_LIST_TO_TUPLE",
+    "INTRINSIC_TYPEVAR",
+    "INTRINSIC_PARAMSPEC",
+    "INTRINSIC_TYPEVARTUPLE",
+    "INTRINSIC_SUBSCRIPT_GENERIC",
+    "INTRINSIC_TYPEALIAS",
+]
+
+PYTHON_3_12_INTRINSIC_2_DESCS = [
+    "INTRINSIC_2_INVALID",
+    "INTRINSIC_PREP_RERAISE_STAR",
+    "INTRINSIC_TYPEVAR_WITH_BOUND",
+    "INTRINSIC_TYPEVAR_WITH_CONSTRAINTS",
+    "INTRINSIC_SET_FUNCTION_TYPE_PARAMS",
+]
+
+
+def intrinsic_1_desc(arg: int, version: Tuple[int, int]) -> Optional[str]:
+    if version >= (3, 12):
+        descs = PYTHON_3_12_INTRINSIC_1_DESCS
+    else:
+        descs = []
+    return descs[arg]
+
+
+def intrinsic_2_desc(arg: int, version: Tuple[int, int]) -> Optional[str]:
+    if version >= (3, 12):
+        descs = PYTHON_3_12_INTRINSIC_2_DESCS
+    else:
+        descs = []
+    return descs[arg]
