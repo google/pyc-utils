@@ -106,7 +106,10 @@ class Disassembler:
         if self.python_version >= (3, 10):
             if arg_type == mapping.JREL:
                 signed_arg = -arg if _is_backward_jump(name) else arg
-                return signed_arg * 2 + end_pos
+                target = signed_arg * 2 + end_pos
+                if self.python_version >= (3, 12):
+                    target += 2 * mapping.caches(name, self.python_version)
+                return target
             elif arg_type == mapping.JABS:
                 return arg * 2
         if arg_type == mapping.JREL:

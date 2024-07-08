@@ -77,6 +77,22 @@ class TestBytecode(unittest.TestCase):
         for version in base.VERSIONS:
             run(version)
 
+    def test_argval_for_jump_312(self):
+        # In 3.12+ relative jump offsets start after CACHE entries belonging to
+        # the current instruction.
+        path = base.test_pyc("loop", (3, 12))
+        code = pyc.load_file(path)
+        opcodes = [(x.name, x.argval) for x in bytecode.dis(code)]
+        opcodes = opcodes[6:7]
+        expected = [
+            # In 3.12 FOR_ITER is followed by a CACHE entry. If we weren't
+            # accounting for that, the calculated jump target (argval) would be
+            # off.
+            # Verified using `dis` and godbolt.
+            ("FOR_ITER", 26),
+        ]
+        self.assertEqual(opcodes, expected)
+
     def test_line_col(self):
         path = base.test_pyc("trivial", (3, 11))
         code = pyc.load_file(path)

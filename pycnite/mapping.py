@@ -14,11 +14,12 @@
 
 """Mapping of opcode codes to names."""
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Mapping, Optional, Tuple
 
 OpMap = Dict[int, str]
 Overlay = Dict[int, Optional[str]]
-OpArgs = Dict[str, int]
+OpArgs = Mapping[str, int]
+OpCaches = Mapping[str, int]
 
 
 def _overlay_mapping(mapping: OpMap, new_entries: Overlay) -> OpMap:
@@ -464,3 +465,44 @@ def intrinsic_2_desc(arg: int, version: Tuple[int, int]) -> Optional[str]:
     else:
         descs = []
     return descs[arg]
+
+
+# ----------------------------------------------------------
+# Inline cache entry counts
+
+PYTHON_3_11_CACHES: OpCaches = {
+    "BINARY_OP": 1,
+    "BINARY_SUBSCR": 4,
+    "CALL": 4,
+    "COMPARE_OP": 2,
+    "LOAD_ATTR": 4,
+    "LOAD_GLOBAL": 5,
+    "LOAD_METHOD": 10,
+    "PRECALL": 1,
+    "STORE_ATTR": 4,
+    "STORE_SUBSCR": 1,
+    "UNPACK_SEQUENCE": 1,
+}
+
+PYTHON_3_12_CACHES: OpCaches = {
+    **PYTHON_3_11_CACHES,
+    "BINARY_SUBSCR": 1,
+    "CALL": 3,
+    "COMPARE_OP": 1,
+    "FOR_ITER": 1,
+    "LOAD_ATTR": 9,
+    "LOAD_GLOBAL": 4,
+    "LOAD_METHOD": 0,
+    "LOAD_SUPER_ATTR": 1,
+    "SEND": 1,
+}
+
+
+def caches(name: str, version: Tuple[int, int]) -> int:
+    if version >= (3, 12):
+        cachesmap = PYTHON_3_12_CACHES
+    elif version >= (3, 11):
+        cachesmap = PYTHON_3_11_CACHES
+    else:
+        cachesmap = {}
+    return cachesmap.get(name, 0)
