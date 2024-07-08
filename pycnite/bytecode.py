@@ -98,6 +98,8 @@ class Disassembler:
                 return arg >> 4
             if name == "LOAD_ATTR":
                 return arg >> 1
+            if name == "LOAD_SUPER_ATTR":
+                return arg >> 2
         if self.python_version >= (3, 11):
             if name == "LOAD_GLOBAL":
                 return arg // 2
