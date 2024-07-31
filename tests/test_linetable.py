@@ -17,11 +17,13 @@
 import itertools
 import unittest
 
-from . import base
+from pycnite import bytecode
 from pycnite import linetable
+from pycnite import mapping
 from pycnite import pyc
 from pycnite import types
 
+from . import base
 
 class TestLineTable(unittest.TestCase):
     """Test linetable parsing."""
@@ -57,7 +59,7 @@ class TestLineTable(unittest.TestCase):
                 expected = [1, 2, 3, 4, 5, 6, 1, 2]
             else:
                 expected = [1, 2, 3, 4, 5, 6]
-            self.assertEqual(lines, expected)
+            self.assertEqual(lines, expected, f"version: {version}")
 
     def test_generator_311(self):
         # Check that we handle NO_COLUMN_INFO correctly in 3.11
@@ -66,6 +68,64 @@ class TestLineTable(unittest.TestCase):
         self.assertEqual(len(entries), 11)
         for e in entries:
             self.assertEqual(e.line, e.endline)
+
+    def test_read_sequential_311(self):
+        """Test sequential get() calls in 3.11+.
+
+        3.11+ combines consecutive opcodes with the same position in a single
+        entry in the linetable. This test ensures each opcode reports the
+        correct position when read sequentially.
+        """
+        def pos(e: linetable.Entry):
+            return f"{e.line}:{e.startcol}-{e.endline}:{e.endcol}"
+        for version in base.VERSIONS:
+            if version < (3, 11):
+                continue
+            opmap = mapping.get_mapping(version)
+            path = base.test_pyc("loop", version)
+            code = pyc.load_file(path)
+            lt = linetable.linetable_reader(code)
+            actual = [
+                (o.start, opmap[o.op], pos(lt.get(o.start)))
+                for o in bytecode.wordcode_reader(code.co_code)
+                if o.op != 0  # ignore CACHE entries
+            ]
+            # Compare to output of:
+            # >>> code="""for i in range(10):
+            # ...     pass
+            # ... """
+            # >>> for i in dis.Bytecode(code): print(i.offset, i.positions)
+            if version >= (3, 12):
+                expected = [
+                    (0, "RESUME", "0:0-1:0"),
+                    (2, "PUSH_NULL", "1:9-1:14"),
+                    (4, "LOAD_NAME", "1:9-1:14"),
+                    (6, "LOAD_CONST", "1:15-1:17"),
+                    (8, "CALL", "1:9-1:18"),
+                    (16, "GET_ITER", "1:0-2:6"),
+                    (18, "FOR_ITER", "1:0-2:6"),
+                    (22, "STORE_NAME", "1:4-1:5"),
+                    (24, "JUMP_BACKWARD", "2:2-2:6"),
+                    (26, "END_FOR", "1:0-2:6"),
+                    (28, "RETURN_CONST", "1:0-2:6"),
+                ]
+            else:
+                expected = [
+                    (0, "RESUME", "0:0-1:0"),
+                    (2, "PUSH_NULL", "1:9-1:14"),
+                    (4, "LOAD_NAME", "1:9-1:14"),
+                    (6, "LOAD_CONST", "1:15-1:17"),
+                    (8, "PRECALL", "1:9-1:18"),
+                    (12, "CALL", "1:9-1:18"),
+                    (22, "GET_ITER", "1:0-2:6"),
+                    (24, "FOR_ITER", "1:0-2:6"),
+                    (26, "STORE_NAME", "1:4-1:5"),
+                    (28, "JUMP_BACKWARD", "2:2-2:6"),
+                    (30, "LOAD_CONST", "1:0-2:6"),
+                    (32, "RETURN_VALUE", "1:0-2:6"),
+                ]
+            actual = actual[:len(expected)]
+            self.assertEqual(actual, expected, f"version: {version}")
 
 
 class TestExceptionTable(unittest.TestCase):

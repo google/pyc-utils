@@ -38,10 +38,6 @@ class Entry:
 class LineTableReader(abc.ABC):
     """State machine for decoding a pyc line table."""
 
-    def __init__(self, code: types.CodeTypeBase):
-        self.lineno = code.co_firstlineno
-        self.pos = 0
-
     @abc.abstractmethod
     def get(self, i: int) -> Entry:
         """Get position information for the instruction at the given position.
@@ -71,7 +67,8 @@ class LnotabReader(LineTableReader):
     """Read code.co_lnotab from pre-Python 3.11."""
 
     def __init__(self, code: types.CodeType38):
-        super().__init__(code)
+        self.lineno = code.co_firstlineno
+        self.pos = 0
         self.linetable = code.co_lnotab
         if self.linetable:
             self.end_pos = len(self.linetable)
@@ -144,14 +141,20 @@ class PyCodeLocation:
 
 
 class LineTableReader311(LineTableReader):
-    """Read code.co_linetable for Python 3.11+"""
+    """Read code.co_linetable for Python 3.11+.
+
+    https://github.com/python/cpython/blob/3.11/Objects/locations.md
+    """
 
     def __init__(self, code: types.CodeType311):
-        super().__init__(code)
         self.table = code.co_linetable
         self.line = code.co_firstlineno
+        self.endline = -1
+        self.col = -1
+        self.endcol = -1
         self.start = -1
         self.end = 0
+        self.pos = 0
         self.end_pos = len(self.table)
 
     def _read_byte(self):
@@ -176,60 +179,58 @@ class LineTableReader311(LineTableReader):
         else:
             return uval >> 1
 
-    def read(self):
+    def _advance(self):
+        """Advance to the next linetable entry.
+
+        Compare:
+        https://github.com/python/cpython/blob/bc264eac3ad14dab748e33b3d714c2674872791f/Objects/codeobject.c#L1099-L1152
+        """
         b = self._read_byte()
         code = (b >> 3) & 15
         code_units = (b & 7) + 1
         self.start = self.end
         self.end = self.start + code_units * 2
         if code == PyCodeLocation.INFO_NONE:
-            endline = -1
-            col = -1
-            endcol = -1
+            self.endline = -1
+            self.col = -1
+            self.endcol = -1
         elif code == PyCodeLocation.INFO_LONG:
             self.line += self._read_signed_varint()
-            endline = self.line + self._read_varint()
-            col = self._read_varint() - 1
-            endcol = self._read_varint() - 1
+            self.endline = self.line + self._read_varint()
+            self.col = self._read_varint() - 1
+            self.endcol = self._read_varint() - 1
         elif code == PyCodeLocation.INFO_NO_COLUMNS:
             self.line += self._read_signed_varint()
-            endline = self.line
-            col = -1
-            endcol = -1
+            self.endline = self.line
+            self.col = -1
+            self.endcol = -1
         elif code in (
             PyCodeLocation.INFO_ONE_LINE0,
             PyCodeLocation.INFO_ONE_LINE1,
             PyCodeLocation.INFO_ONE_LINE2,
         ):
             self.line += code - 10
-            endline = self.line
-            col = self._read_byte()
-            endcol = self._read_byte()
+            self.endline = self.line
+            self.col = self._read_byte()
+            self.endcol = self._read_byte()
         else:
             b2 = self._read_byte()
             assert b2 & 128 == 0
-            endline = self.line
-            col = (code << 3) | (b2 >> 4)
-            endcol = col + (b2 & 15)
-        return (endline, col, endcol)
+            self.endline = self.line
+            self.col = (code << 3) | (b2 >> 4)
+            self.endcol = self.col + (b2 & 15)
 
     def get(self, i: int) -> Entry:
-        if self.pos >= self.end_pos:
-            # Happens for the final RETURN_VALUE in generator expressions
-            endline = startcol = endcol = -1
-        else:
-            endline = startcol = endcol = -1
-            # Method calls seem to generate extra linetable entries so we cannot
-            # just read one linetable entry per opcode.
-            while self.end <= i and self.pos < self.end_pos:
-                endline, startcol, endcol = self.read()
+        # Advance to the next linetable entry containing `i` if necessary.
+        while self.end <= i and self.pos < self.end_pos:
+            self._advance()
         return Entry(
-            offset=i,
+            offset=self.start,
             end_offset=self.end,
             line=self.line,
-            endline=endline,
-            startcol=startcol,
-            endcol=endcol,
+            endline=self.endline,
+            startcol=self.col,
+            endcol=self.endcol,
         )
 
     def read_all(self):
